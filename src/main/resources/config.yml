@@ -1,0 +1,19 @@
+# CommandBundle Configuration
+
+# Commands that cannot be used in bundles (security feature)
+# Add any dangerous commands here to prevent abuse
+blacklisted-commands:
+  - stop
+  - restart
+  - op
+  - deop
+  - pardon
+  - ban
+  - ban-ip
+  - whitelist
+
+# Enable debug messages in console
+debug: false
+
+# Log all command bundle executions
+log-executions: false

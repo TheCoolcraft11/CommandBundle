@@ -1,0 +1,53 @@
+name: CommandBundle
+version: '1.0-SNAPSHOT'
+main: de.thecoolcraft11.commandBundle.CommandBundle
+api-version: '1.21'
+author: thecoolcraft11
+description: A plugin that allows players to create custom command bundles
+
+commands:
+  bundle:
+    description: Manage command bundles
+    usage: /bundle <add|remove|list|info|reload>
+    aliases: [cmdbundle, cb]
+
+permissions:
+  commandbundle.*:
+    description: Grants all CommandBundle permissions
+    children:
+      commandbundle.add: true
+      commandbundle.remove: true
+      commandbundle.list: true
+      commandbundle.info: true
+      commandbundle.reload: true
+      commandbundle.use: true
+      commandbundle.edit: true
+      commandbundle.subcommand: true
+      commandbundle.permission: true
+  commandbundle.add:
+    description: Allows adding new command bundles
+    default: op
+  commandbundle.remove:
+    description: Allows removing command bundles
+    default: op
+  commandbundle.list:
+    description: Allows listing command bundles
+    default: true
+  commandbundle.info:
+    description: Allows viewing command bundle details
+    default: true
+  commandbundle.reload:
+    description: Allows reloading command bundles
+    default: op
+  commandbundle.use:
+    description: Allows using command bundles
+    default: true
+  commandbundle.edit:
+    description: Allows editing command bundles
+    default: op
+  commandbundle.subcommand:
+    description: Allows adding sub-commands to bundles
+    default: op
+  commandbundle.permission:
+    description: Allows setting permissions for bundles
+    default: op
