@@ -421,6 +421,14 @@ public class CustomCommandManager {
             text = text.replace("%args%", "");
         }
 
+        for (int i = 1; i <= args.length; i++) {
+            String pattern = "%arg" + i + "-%";
+            if (text.contains(pattern)) {
+                String[] remaining = Arrays.copyOfRange(args, i - 1, args.length);
+                text = text.replace(pattern, String.join(" ", remaining));
+            }
+        }
+
 
         for (int i = 0; i < args.length; i++) {
             text = text.replace("%arg" + (i + 1) + "%", args[i]);
