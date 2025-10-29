@@ -421,27 +421,52 @@ public class CustomCommandManager {
             text = text.replace("%args%", "");
         }
 
-        for (int i = 1; i <= args.length; i++) {
+        
+        for (int i = 1; i <= Math.max(args.length + 5, 10); i++) {
+            
+            String patternWithDefault = "%arg" + i + "-::";
+            int defaultStart = text.indexOf(patternWithDefault);
+            if (defaultStart != -1) {
+                int defaultEnd = text.indexOf("%", defaultStart + patternWithDefault.length());
+                if (defaultEnd != -1) {
+                    String fullPlaceholder = text.substring(defaultStart, defaultEnd + 1);
+                    String defaultValue = text.substring(defaultStart + patternWithDefault.length(), defaultEnd);
+
+                    if (i <= args.length) {
+                        String[] remaining = Arrays.copyOfRange(args, i - 1, args.length);
+                        text = text.replace(fullPlaceholder, String.join(" ", remaining));
+                    } else {
+                        text = text.replace(fullPlaceholder, defaultValue);
+                    }
+                }
+            }
+
+            
             String pattern = "%arg" + i + "-%";
             if (text.contains(pattern)) {
-                String[] remaining = Arrays.copyOfRange(args, i - 1, args.length);
-                text = text.replace(pattern, String.join(" ", remaining));
+                if (i <= args.length) {
+                    String[] remaining = Arrays.copyOfRange(args, i - 1, args.length);
+                    text = text.replace(pattern, String.join(" ", remaining));
+                } else {
+                    text = text.replace(pattern, "");
+                }
             }
         }
 
 
+        
         for (int i = 0; i < args.length; i++) {
             text = text.replace("%arg" + (i + 1) + "%", args[i]);
         }
 
-
+        
         while (text.contains("%arg")) {
             int start = text.indexOf("%arg");
             int end = text.indexOf("%", start + 1);
             if (end == -1) break;
 
             String placeholder = text.substring(start, end + 1);
-            String[] parts = placeholder.substring(1, placeholder.length() - 1).split("\\|");
+            String[] parts = placeholder.substring(1, placeholder.length() - 1).split("::");
 
             if (parts.length >= 2) {
                 String argPart = parts[0];

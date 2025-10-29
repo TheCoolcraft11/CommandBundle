@@ -516,7 +516,7 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2) {
-            // View current permission
+            
             String permission = commandManager.getCommandPermission(commandName);
             if (permission == null || permission.isEmpty()) {
                 sender.sendMessage(Component.text("Command /" + commandName + " has no permission requirement.", NamedTextColor.YELLOW));
@@ -525,7 +525,7 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
                         .append(Component.text(permission, NamedTextColor.WHITE)));
             }
         } else {
-            // Set permission
+            
             String permission = args[2];
 
             if (permission.equalsIgnoreCase("none") || permission.equalsIgnoreCase("remove")) {
@@ -579,4 +579,3 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
         return completions;
     }
 }
-
