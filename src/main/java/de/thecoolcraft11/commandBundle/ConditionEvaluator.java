@@ -10,19 +10,35 @@ public class ConditionEvaluator {
 
 
     public static boolean evaluate(CommandSender sender, String condition) {
+        return evaluate(sender, condition, null);
+    }
+
+    public static boolean evaluate(CommandSender sender, String condition, VariableManager variableManager) {
         if (condition == null || condition.isEmpty()) {
             return true;
         }
 
+        if (sender instanceof Player player) {
+            condition = condition.replace("%player%", player.getName())
+                    .replace("%uuid%", player.getUniqueId().toString())
+                    .replace("%player_uuid%", player.getUniqueId().toString());
+        }
         String[] parts = condition.split(":", 3);
         if (parts.length < 2) {
             return false;
         }
-
         String type = parts[0].toLowerCase();
         String value = parts[1];
         String param = parts.length > 2 ? parts[2] : null;
 
+        if (type.equals("var")) {
+            if (sender instanceof Player player) {
+                value = value.replace("%player%", player.getName());
+                if (param != null) {
+                    param = param.replace("%player%", player.getName());
+                }
+            }
+        }
         return switch (type) {
             case "permission", "perm" -> sender.hasPermission(value);
             case "item" -> evaluateItem(sender, value, param);
@@ -34,8 +50,35 @@ public class ConditionEvaluator {
             case "sneaking" -> evaluateSneaking(sender, value);
             case "op" -> sender.isOp() == Boolean.parseBoolean(value);
             case "player" -> evaluatePlayerName(sender, value);
+            case "var" -> evaluateVariable(sender, value, param, variableManager);
             default -> false;
         };
+    }
+
+    private static boolean evaluateVariable(CommandSender sender, String varName, String expectedValue, VariableManager variableManager) {
+        if (variableManager == null || expectedValue == null) {
+            return false;
+        }
+
+
+        String actualValue;
+        if (sender instanceof Player player) {
+            actualValue = variableManager.getPlayer(player.getUniqueId(), varName);
+        } else {
+            actualValue = variableManager.getGlobal(varName);
+        }
+
+        if (actualValue == null) {
+            return false;
+        }
+
+
+        if (expectedValue.equalsIgnoreCase("true") || expectedValue.equalsIgnoreCase("false")) {
+            return actualValue.equalsIgnoreCase(expectedValue);
+        }
+
+
+        return actualValue.equalsIgnoreCase(expectedValue);
     }
 
     private static boolean evaluateItem(CommandSender sender, String itemName, String amount) {

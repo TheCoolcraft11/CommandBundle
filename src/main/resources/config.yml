@@ -17,3 +17,13 @@ debug: false
 
 # Log all command bundle executions
 log-executions: false
+
+# Host command execution (disabled by default - security feature)
+# Allows executing system commands on the host machine using $ prefix
+# WARNING: Enabling this is a security risk!
+host-commands-enabled: false
+
+# Webhook execution (disabled by default)
+# Allows sending HTTP requests using % prefix
+webhooks-enabled: false
+
