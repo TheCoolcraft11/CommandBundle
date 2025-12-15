@@ -3,13 +3,14 @@ version: '1.0-SNAPSHOT'
 main: de.thecoolcraft11.commandBundle.CommandBundle
 api-version: '1.21'
 author: thecoolcraft11
+website: https://github.com/TheCoolcraft11/CommandBundle
 description: A plugin that allows players to create custom command bundles
 
 commands:
   bundle:
     description: Manage command bundles
     usage: /bundle <add|remove|list|info|reload>
-    aliases: [cmdbundle, cb]
+    aliases: [ cmdbundle, cb ]
 
 permissions:
   commandbundle.*:
