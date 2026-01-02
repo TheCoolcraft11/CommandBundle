@@ -225,8 +225,6 @@ access.
     - Allows viewing bundle details.
 - `commandbundle.reload`
     - Allows reloading bundle definitions from `commands.yml`.
-- `commandbundle.use`
-    - Allows using bundles (executing the dynamic commands).
 - `commandbundle.edit`
     - Allows editing existing bundles.
 - `commandbundle.subcommand`

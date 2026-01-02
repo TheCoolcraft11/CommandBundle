@@ -21,7 +21,6 @@ permissions:
       commandbundle.list: true
       commandbundle.info: true
       commandbundle.reload: true
-      commandbundle.use: true
       commandbundle.edit: true
       commandbundle.subcommand: true
       commandbundle.permission: true
@@ -40,9 +39,6 @@ permissions:
   commandbundle.reload:
     description: Allows reloading command bundles
     default: op
-  commandbundle.use:
-    description: Allows using command bundles
-    default: true
   commandbundle.edit:
     description: Allows editing command bundles
     default: op
