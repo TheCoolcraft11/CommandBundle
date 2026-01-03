@@ -42,6 +42,7 @@ For a full reference of the **action syntax** you can use inside `commands.yml`,
       subcommands/permissions.
 - Command actions support:
     - Delays, conditions, random selection.
+    - **Advanced AND/OR logic** for combining multiple conditions.
     - Variables and simple JSON field access.
     - Loops over lists of values.
     - Host OS commands (if enabled).
@@ -59,9 +60,13 @@ Details of the action syntax live in `FEATURES.md`.
 4. Confirm the plugin is loaded:
     - Run `/plugins` and look for **CommandBundle**.
     - Check your console for any startup errors.
-5. On first run the plugin creates its data folder:
+5. On first run the plugin creates its data folder structure:
     - `plugins/CommandBundle/config.yml` – global settings.
-    - `plugins/CommandBundle/commands.yml` – your bundles/custom commands (initially empty).
+    - `plugins/CommandBundle/commands/` – directory for command files.
+    - `plugins/CommandBundle/commands/commands.yml` – default file for bundles (created on first `/bundle add`).
+
+You can create additional YAML files in the `commands/` directory to organize your commands. All `.yml` files
+will be automatically loaded and merged at startup.
 
 ---
 
@@ -169,14 +174,69 @@ Reload bundle definitions from `commands.yml`.
 > Note: `/bundle reload` reloads **commands.yml** (bundles), not `config.yml`. To apply changes in `config.yml`, restart
 > the server or reload the plugin with your server's plugin manager.
 
+### File Management Commands
+
+These commands manage which command files are loaded and when.
+
+#### `/bundle loadfile <filename.yml>`
+
+Temporarily load commands from a specific file.
+
+- **Purpose**: Load a command file for the current session without permanently enabling it.
+- **Permission**: `commandbundle.reload`
+- **Example**:
+    - `/bundle loadfile events.yml`
+- **Behavior**:
+    - Commands are loaded into memory immediately
+    - NOT saved to config.yml
+    - File will NOT be loaded on next server restart
+
+#### `/bundle enablefile <filename.yml>`
+
+Enable a command file for auto-loading on server startup.
+
+- **Purpose**: Permanently enable a file to be loaded every time the server starts.
+- **Permission**: `commandbundle.reload`
+- **Example**:
+    - `/bundle enablefile events.yml`
+- **Behavior**:
+    - Saves the setting to config.yml
+    - Immediately loads the file
+    - File will be auto-loaded on every restart
+
+#### `/bundle disablefile <filename.yml>`
+
+Disable a command file from being auto-loaded.
+
+- **Purpose**: Stop a file from being auto-loaded at startup.
+- **Permission**: `commandbundle.reload`
+- **Example**:
+    - `/bundle disablefile events.yml`
+- **Behavior**:
+    - Saves the setting to config.yml
+    - Does NOT unload currently loaded commands
+    - File will NOT load on next restart
+
+#### `/bundle unloadfile <filename.yml>`
+
+Unload commands from a specific file.
+
+- **Purpose**: Remove commands from memory that were loaded from a specific file.
+- **Permission**: `commandbundle.reload`
+- **Example**:
+    - `/bundle unloadfile events.yml`
+- **Behavior**:
+    - Removes commands from memory immediately
+    - Does NOT change config.yml
+    - Useful for testing or temporary changes
+
 ### `/bundle help [topic]`
 
 Show in-game help for bundle features.
 
 - **Permission**: usually same as `commandbundle.add`/`commandbundle.edit`.
 - **Topics** (if provided):
-    - `placeholders` – argument and player/server placeholders.
-    - `conditions` – `[if:]`, `[else if:]`, `[else]`.
+
     - `delays` – `[delay:]`.
     - `variables` – `+name:value` and `%var:name%`.
     - `random` – `[random]` / `[random:<weight>]`.
@@ -197,14 +257,9 @@ Bundles use the **syntax** documented in `FEATURES.md`. In short, actions can:
 - Run commands as the player or console, optionally silently.
 - Send rich colored messages.
 - Use `[delay:seconds]` to schedule actions later.
-- Use `[if:type:value]`, `[else if:...]`, `[else]` for branching.
+- Use `[branch]...[endbranch]` with `[if:type:value]`, `[else if:...]`, `[else]` for multi-line branching.
 - Use `[random]` / `[random:weight]` to pick one of several options.
-- Set and read variables (`+name:value`, `%var:name%`, JSON field access).
-- Loop over lists (`[foreach:list:var]`).
-- Read/write files (`,,file` / `;;file`).
-- Execute host system commands (`$...`) and HTTP webhooks (`%...`) if enabled in `config.yml`.
-
-See `FEATURES.md` for full syntax and examples.
+- Use `[CONDSTART][AND]` or `[CONDSTART][OR]` to combine multiple conditions with AND/OR logic.
 
 ---
 
@@ -262,15 +317,33 @@ As of the current implementation, these options are especially important:
     - Enables or disables host OS commands started with `$` and command substitution with `&(...)`.
 - `webhooks-enabled` (boolean)
     - Enables or disables webhook actions starting with `%`.
+- `default-commands-file` (string, default: `commands.yml`)
+    - Specifies the default file name used when saving commands via the `/bundle` in-game command.
+    - Commands are saved to `plugins/CommandBundle/commands/<filename>`.
 
 Other options may exist (e.g. debug or logging toggles) depending on plugin version; check the generated
 `config.yml` and its comments for details.
 
-Bundle definitions themselves are stored in:
+### Command Files & Directory Structure
 
-- `plugins/CommandBundle/commands.yml`
+Bundle definitions are stored in the **commands directory**:
 
-Structure (simplified):
+- `plugins/CommandBundle/commands/`
+    - `commands.yml` (default, created when using `/bundle add` or `/bundle edit`)
+    - `custom_commands.yml` (or any other `*.yml` file you create)
+
+**How it works**:
+
+- The plugin automatically scans `plugins/CommandBundle/commands/` for all `.yml` files.
+- All command definitions from all files are **merged into memory** at startup.
+- When you use `/bundle add` or `/bundle edit` commands, they are saved to the **default commands file** (configured by
+  `default-commands-file`).
+- If a command name appears in multiple files, the first occurrence is used and duplicates are skipped (with a warning).
+- By default only `default-commands-file` is loaded on startup, but you can use `/bundle loadfile` and
+  `/bundle enablefile` to load additional files, or enable `auto-load-commands` in `config.yml` to load all files
+  automatically.
+
+**Example YAML structure** (simplified):
 
 ```yml
 commands:

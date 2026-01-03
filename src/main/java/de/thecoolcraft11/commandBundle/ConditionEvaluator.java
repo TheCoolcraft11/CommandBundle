@@ -9,10 +9,6 @@ import org.bukkit.inventory.ItemStack;
 public class ConditionEvaluator {
 
 
-    public static boolean evaluate(CommandSender sender, String condition) {
-        return evaluate(sender, condition, null);
-    }
-
     public static boolean evaluate(CommandSender sender, String condition, VariableManager variableManager) {
         if (condition == null || condition.isEmpty()) {
             return true;
@@ -60,6 +56,12 @@ public class ConditionEvaluator {
             return false;
         }
 
+        String jsonPath = null;
+        int dot = varName.indexOf('.');
+        if (dot != -1) {
+            jsonPath = varName.substring(dot + 1);
+            varName = varName.substring(0, dot);
+        }
 
         String actualValue;
         if (sender instanceof Player player) {
@@ -68,17 +70,95 @@ public class ConditionEvaluator {
             actualValue = variableManager.getGlobal(varName);
         }
 
+        if (jsonPath != null && actualValue != null && !actualValue.isEmpty()) {
+            actualValue = extractJsonPath(actualValue, jsonPath);
+        }
+
         if (actualValue == null) {
             return false;
         }
 
 
-        if (expectedValue.equalsIgnoreCase("true") || expectedValue.equalsIgnoreCase("false")) {
-            return actualValue.equalsIgnoreCase(expectedValue);
+        if (expectedValue.equals("!=")) {
+            return !actualValue.isEmpty();
+        }
+
+        if (expectedValue.startsWith("!=")) {
+            String compareTo = expectedValue.substring(2);
+            return !actualValue.equalsIgnoreCase(compareTo);
         }
 
 
         return actualValue.equalsIgnoreCase(expectedValue);
+    }
+
+    private static String extractJsonPath(String json, String path) {
+        String current = json.trim();
+        for (String key : path.split("\\.")) {
+            current = findJsonValue(current, key);
+            if (current == null || current.isEmpty()) {
+                return "";
+            }
+            current = stripQuotes(current.trim());
+        }
+        return current;
+    }
+
+    private static String findJsonValue(String json, String key) {
+        int idx = 0;
+        while (true) {
+            idx = json.indexOf("\"" + key + "\"", idx);
+            if (idx == -1) return null;
+            int colon = json.indexOf(":", idx + key.length() + 2);
+            if (colon == -1) return null;
+            int pos = colon + 1;
+            while (pos < json.length() && Character.isWhitespace(json.charAt(pos))) pos++;
+            if (pos >= json.length()) return null;
+            char ch = json.charAt(pos);
+            if (ch == '"') {
+                int end = pos + 1;
+                boolean escape = false;
+                while (end < json.length()) {
+                    char c = json.charAt(end);
+                    if (c == '"' && !escape) break;
+                    escape = c == '\\' && !escape;
+                    end++;
+                }
+                if (end >= json.length()) return null;
+                return json.substring(pos + 1, end);
+            } else if (ch == '{') {
+                int depth = 1, end = pos + 1;
+                while (end < json.length() && depth > 0) {
+                    char c = json.charAt(end);
+                    if (c == '{') depth++;
+                    else if (c == '}') depth--;
+                    end++;
+                }
+                if (depth != 0) return null;
+                return json.substring(pos, end);
+            } else if (ch == '[') {
+                int depth = 1, end = pos + 1;
+                while (end < json.length() && depth > 0) {
+                    char c = json.charAt(end);
+                    if (c == '[') depth++;
+                    else if (c == ']') depth--;
+                    end++;
+                }
+                if (depth != 0) return null;
+                return json.substring(pos, end);
+            } else {
+                int end = pos;
+                while (end < json.length() && json.charAt(end) != ',' && json.charAt(end) != '}') end++;
+                return json.substring(pos, end).trim();
+            }
+        }
+    }
+
+    private static String stripQuotes(String value) {
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     private static boolean evaluateItem(CommandSender sender, String itemName, String amount) {

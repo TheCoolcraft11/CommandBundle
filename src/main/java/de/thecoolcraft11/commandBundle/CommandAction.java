@@ -8,6 +8,7 @@ public class CommandAction {
     private String condition = null;
     private String elseIfCondition = null;
     private boolean hasElse = false;
+    private boolean isContinuedCondition = false;
     private boolean isConsoleCommand = false;
     private boolean suppressCommandOutput = false;
     private boolean isRandom = false;
@@ -27,6 +28,11 @@ public class CommandAction {
     private String messageColor = null;
     private String messageText = null;
     private String messagePlayer = null;
+    private boolean isBranchStart = false;
+    private boolean isBranchEnd = false;
+    private boolean isCondStart = false;
+    private boolean isCondEnd = false;
+    private String conditionLogic = null;  
 
     public CommandAction(String rawAction) {
         this.rawAction = rawAction.trim();
@@ -67,7 +73,7 @@ public class CommandAction {
             }
         }
 
-        
+
         if (action.contains("[else if:")) {
             int start = action.indexOf("[else if:");
             int end = action.indexOf("]", start);
@@ -75,19 +81,21 @@ public class CommandAction {
                 this.elseIfCondition = action.substring(start + 9, end);
                 action = action.substring(0, start) + action.substring(end + 1);
             }
-        }
-        
-        else if (action.contains("[else]")) {
+        } else if (action.contains("[else]")) {
             this.hasElse = true;
             action = action.replace("[else]", "");
-        }
-        
-        else if (action.contains("[if:")) {
+        } else if (action.contains("[if:")) {
             int start = action.indexOf("[if:");
             int end = action.indexOf("]", start);
             if (end > start) {
                 this.condition = action.substring(start + 4, end);
                 action = action.substring(0, start) + action.substring(end + 1);
+
+                
+                
+                if (action.trim().isEmpty()) {
+                    this.isContinuedCondition = true;
+                }
             }
         }
 
@@ -115,13 +123,12 @@ public class CommandAction {
             action = action.substring(1);
         }
 
-        
-        
+
         if (action.startsWith("#message")) {
             this.isMessage = true;
             action = action.substring(8);
 
-            
+
             if (action.startsWith("@")) {
                 int atIndex = action.indexOf(":");
                 if (atIndex > 0) {
@@ -145,7 +152,7 @@ public class CommandAction {
             action = action.substring(1);
         }
 
-        
+
         if (action.startsWith("-")) {
             this.suppressCommandOutput = true;
             action = action.substring(1);
@@ -161,7 +168,7 @@ public class CommandAction {
                 this.setVariableValue = action.substring(colonIndex + 1).trim();
             }
 
-            
+
             if (this.setVariableName != null && this.setVariableName.endsWith("~")) {
                 this.suppressVariableOutput = true;
                 this.setVariableName = this.setVariableName.substring(0, this.setVariableName.length() - 1);
@@ -170,7 +177,7 @@ public class CommandAction {
             action = "";
         }
 
-        
+
         if (action.startsWith("-")) {
             this.suppressCommandOutput = true;
             action = action.substring(1);
@@ -195,6 +202,36 @@ public class CommandAction {
             action = action.substring(1);
 
             this.webhookData = WebhookData.parse(action);
+        }
+
+        if (action.contains("[branch]")) {
+            isBranchStart = true;
+            action = action.replace("[branch]", "");
+        }
+
+        if (action.contains("[endbranch]")) {
+            isBranchEnd = true;
+            action = action.replace("[endbranch]", "");
+        }
+
+        if (action.contains("[CONDSTART]")) {
+            isCondStart = true;
+            action = action.replace("[CONDSTART]", "");
+        }
+
+        if (action.contains("[CONDEND]")) {
+            isCondEnd = true;
+            action = action.replace("[CONDEND]", "");
+        }
+
+        if (action.contains("[AND]")) {
+            conditionLogic = "AND";
+            action = action.replace("[AND]", "");
+        }
+
+        if (action.contains("[OR]")) {
+            conditionLogic = "OR";
+            action = action.replace("[OR]", "");
         }
 
         this.processedAction = action.trim();
@@ -296,6 +333,10 @@ public class CommandAction {
         return hasElse;
     }
 
+    public boolean isContinuedCondition() {
+        return isContinuedCondition;
+    }
+
     public boolean isMessage() {
         return isMessage;
     }
@@ -310,5 +351,25 @@ public class CommandAction {
 
     public String getMessagePlayer() {
         return messagePlayer;
+    }
+
+    public boolean isBranchStart() {
+        return isBranchStart;
+    }
+
+    public boolean isBranchEnd() {
+        return isBranchEnd;
+    }
+
+    public boolean isCondStart() {
+        return isCondStart;
+    }
+
+    public boolean isCondEnd() {
+        return isCondEnd;
+    }
+
+    public String getConditionLogic() {
+        return conditionLogic;
     }
 }

@@ -1,12 +1,3 @@
-# Command Bundles – Action Syntax & Capabilities
-
-This document explains **what a bundle action line can do** – the syntax you can use inside
-`plugins/CommandBundle/commands.yml` and how each feature behaves when the bundle runs.
-
-It does **not** cover plugin installation, permissions, or the `/bundle` management command. See `README.md` for that.
-
----
-
 ## 1. Bundle Structure (High Level)
 
 Bundles are stored in `commands.yml` like this:
@@ -57,27 +48,134 @@ If no `[delay:]` is present, the action runs immediately (relative to the timeli
 
 Conditions use `ConditionEvaluator` under the hood and are expressed as text inside `[if:...]` or `[else if:...]`.
 
-### 3.1 Condition Syntax
+### 3.1 Branch Blocks
 
-Action lines support `if / else if / else` chains across multiple lines:
+To create multi-line if/else chains, wrap them in `[branch]` and `[endbranch]` markers:
 
 ```text
-[if:<type>:<value>[:<extra>]]<action>
-[else if:<type>:<value>[:<extra>]]<action>
-[else]<action>
+[branch]
+[if:<type>:<value>[:<extra>]]
+<action when if is true>
+[else if:<type>:<value>[:<extra>]]
+<action when else if is true>
+[else]
+<action when nothing matched>
+[endbranch]
 ```
 
-Where `<type>` is one of the supported condition types below.
+**How it works:**
 
-- If an `[if:...]` condition is **false**, that action is skipped.
-- `[else if:...]` is evaluated only if all previous `if/else if` in the chain were false.
-- `[else]` runs only if all previous `if/else if` in the chain were false.
+- `[branch]` starts a conditional block
+- `[if:...]` tests the first condition; if true, actions following it run until the next condition or `[endbranch]`
+- `[else if:...]` tests only if no prior condition matched; can have multiple `[else if]` clauses
+- `[else]` runs only if no condition matched
+- `[endbranch]` ends the block
+- Only one branch executes; once a condition matches, all others are skipped
+
+**Example - Multiple conditions:**
+
+```text
+[branch]
+[if:var:playerJSON.name:!=]
+[if:var:playerJSON.level:!=]
+#message:gold:Welcome back %var:playerJSON.name%, level %var:playerJSON.level%!
+[else if:var:playerJSON.name:!=]
+#message:yellow:Welcome back %var:playerJSON.name%! (No level data)
+[else]
+#message:red:New player detected!
+[endbranch]
+```
 
 The plugin does not parse full expressions like `%playercount% > 5`. Instead, it uses **typed** conditions.
 
-### 3.2 Supported Condition Types
+### 3.1.1 Advanced: AND/OR Logic for Multiple Conditions
 
-From `ConditionEvaluator`:
+You can combine multiple conditions using **AND** or **OR** logic. By default, multiple `[if:...]` conditions in a chain
+use **OR** logic (any condition can be true). To require **all** conditions to be true, use **AND** logic.
+
+**Using `[CONDSTART]` and `[CONDEND]`:**
+
+```text
+[CONDSTART][OR]
+[if:<condition1>]
+[if:<condition2>]
+[if:<condition3>]
+[CONDEND]
+<action when any condition is true>
+```
+
+```text
+[CONDSTART][AND]
+[if:<condition1>]
+[if:<condition2>]
+[if:<condition3>]
+[CONDEND]
+<action when all conditions are true>
+```
+
+**How it works:**
+
+- `[CONDSTART]` marks the beginning of a condition chain
+- `[AND]` or `[OR]` specifies the logic mode (default is `[OR]` if not specified)
+- Multiple `[if:...]` lines without actions are evaluated together
+- `[CONDEND]` closes the chain and the following action executes if the combined condition is met
+- This works both inside and outside of `[branch]` blocks
+
+**Example - OR Logic (any condition matches):**
+
+```text
+[CONDSTART][OR]
+[if:permission:vip.tier1]
+[if:permission:vip.tier2]
+[if:permission:vip.tier3]
+[CONDEND]
+#message:gold:VIP access granted!
+!give %player% diamond 5
+```
+
+In this example, the player needs **any one** of the three VIP permissions to receive the rewards.
+
+**Example - AND Logic (all conditions must match):**
+
+```text
+[CONDSTART][AND]
+[if:level:>=20]
+[if:health:>15]
+[if:world:adventure_world]
+[CONDEND]
+#message:green:All requirements met! Quest unlocked!
+!give %player% enchanted_book 1
+```
+
+In this example, the player must satisfy **all three** conditions: be level 20+, have health >15, AND be in the
+adventure_world.
+
+**Example - Inside a Branch Block:**
+
+```text
+[branch]
+[CONDSTART][AND]
+[if:permission:quest.access]
+[if:level:>=10]
+[if:var:quest_completed:false]
+[CONDEND]
+#message:gold:Starting quest!
++quest_completed:true
+[else if:var:quest_completed:true]
+#message:yellow:You already completed this quest!
+[else]
+#message:red:Requirements not met. Need permission, level 10+, and quest not completed.
+[endbranch]
+```
+
+**Notes:**
+
+- `[OR]` is the default behavior, so `[CONDSTART]` without `[AND]` or `[OR]` will use OR logic
+- You can mix AND/OR chains with regular if/else branches
+- Empty condition chains (no `[if:...]` lines) will evaluate to false
+- The condition chain must have at least one `[if:...]` to be meaningful
+
+### 3.2 Supported Condition Types
 
 - `permission` / `perm`
     - Checks if sender has a permission.
@@ -529,39 +627,191 @@ number).
 
 Below are some examples that combine multiple features.
 
-### 13.1 Delayed, Console, Variable, and Message
+### 13.1 Multiple If/Else Conditions - Player Profile Check
+
+Check multiple conditions on stored JSON data:
+
+```text
++playerJSON~:{"name": "Steve", "level": 5}
+[branch]
+[if:var:playerJSON.name:!=]
+[if:var:playerJSON.level:!=]
+#message:gold:Welcome back %var:playerJSON.name%, level %var:playerJSON.level%!
+[else if:var:playerJSON.name:!=]
+#message:yellow:Welcome back %var:playerJSON.name%! Complete the tutorial to set your level.
+[else]
+#message:red:New player! Please set up your profile.
+[endbranch]
+```
+
+### 13.2 Permission-Based Commands with Multiple Branches
+
+```text
+[branch]
+[if:permission:server.admin]
+#message:red,BOLD:Admin commands available
+!give %player% diamond 64
+[else if:permission:server.vip]
+#message:gold:VIP rewards!
+!give %player% gold_ingot 32
+[else if:permission:server.member]
+#message:green:Member gift
+!give %player% iron_ingot 16
+[else]
+#message:gray:Join our community for rewards!
+[endbranch]
+```
+
+### 13.3 Health & Level Based Actions
+
+```text
+[branch]
+[if:health:>15]
+[if:level:>=10]
+#message:green:You're strong and experienced!
+!effect give %player% minecraft:strength 60 1
+[else if:health:>15]
+#message:yellow:Healthy but inexperienced. Keep playing!
+[else if:level:>=10]
+#message:gold:Experienced but low health. Be careful!
+!effect give %player% minecraft:regeneration 30 1
+[else]
+#message:red:Low health and level. Here's some help!
+!give %player% cooked_beef 16
+!effect give %player% minecraft:regeneration 60 2
+[endbranch]
+```
+
+### 13.4 Delayed, Console, Variable, and Message
 
 ```text
 [delay:3]+welcomeMsg:Welcome %player%!
 [delay:3]#message:green:%var:welcomeMsg%
-[delay:4]-!say [LOG] Welcome message sent to %player%
+[delay:4]!give %player% bread 16
 ```
 
-### 13.2 Webhook + Variable + Condition
+### 13.5 Webhook + Variable + Condition
 
 ```text
 %https://api.example.com/profile>>profileJson::Content-Type:application/json::{"uuid":"%uuid%"}
+[branch]
 [if:var:profileJson.name:!=]
 #message:gold:Welcome back, %var:profileJson.name%!
 [else]
 #message:yellow:Welcome, new player!
+[endbranch]
 ```
 
-*(Adjust the condition to your actual data/structure – conditions are type/value based, not full expressions.)*
-
-### 13.3 Host Command + Loop
+### 13.6 Host Command + Loop
 
 ```text
-$ls -1 players >>playerFiles
+$ls -1 world/playerdata >>playerFiles
 [foreach:%var:playerFiles%:file]#message:gray:Found data file: %file%
 ```
 
-These examples should give you a **feature-complete view of what bundle action lines can do**. For the exact
-implementation details, see the source classes:
+### 13.7 AND Logic - Multiple Requirements
 
-- `CustomCommandManager.java`
-- `CommandAction.java`
-- `ConditionEvaluator.java`
-- `MathEvaluator.java`
-- `VariableManager.java`
-- `WebhookData.java`
+Check that **all** conditions are met before granting access:
+
+```text
+[CONDSTART][AND]
+[if:permission:quest.access]
+[if:level:>=20]
+[if:health:>15]
+[if:world:dungeon]
+[CONDEND]
+#message:green:All requirements met! Entering hard mode dungeon.
+!tp %player% -100 64 -100
+!effect give %player% minecraft:resistance 300 1
+```
+
+### 13.8 OR Logic - Any Permission Match
+
+Grant rewards if player has **any** of several VIP tiers:
+
+```text
+[CONDSTART][OR]
+[if:permission:vip.bronze]
+[if:permission:vip.silver]
+[if:permission:vip.gold]
+[if:permission:vip.platinum]
+[CONDEND]
+#message:gold:VIP member detected! Daily reward granted.
+!give %player% diamond 5
+!give %player% emerald 10
+```
+
+### 13.9 Combined AND/OR with Branch
+
+Using AND logic within a branch structure:
+
+```text
+[branch]
+[CONDSTART][AND]
+[if:permission:event.participate]
+[if:level:>=15]
+[if:var:event_joined:false]
+[CONDEND]
+#message:aqua:Joining the event!
++event_joined:true
+!tp %player% 0 100 0
+[else if:var:event_joined:true]
+#message:yellow:You're already in the event!
+[else]
+#message:red:Requirements not met. Need permission, level 15+, and not already joined.
+[endbranch]
+```
+
+### 13.10 Complex Multi-Condition Check
+
+Combining multiple AND checks with different actions:
+
+```text
+[CONDSTART][AND]
+[if:world:survival]
+[if:gamemode:SURVIVAL]
+[if:health:>10]
+[CONDEND]
+#message:green:Survival mode active - teleporting to safe zone
+!tp %player% spawn
+
+[CONDSTART][AND]
+[if:world:creative]
+[if:gamemode:CREATIVE]
+[CONDEND]
+#message:aqua:Creative mode active - granting builder tools
+!give %player% worldedit:wand 1
+```
+
+---
+
+## 14. Important Notes
+
+### 14.1 Branch Blocks vs Inline Conditions
+
+**For multi-line conditions, always use `[branch]...[endbranch]`:**
+
+```text
+# CORRECT - Multi-line with branch block
+[branch]
+[if:var:name:!=]
+#message:gold:Hello %var:name%!
+[else]
+#message:yellow:Hello stranger!
+[endbranch]
+
+# ALSO WORKS - Single line (no branch needed)
+[if:var:name:!=] #message:gold:Hello %var:name%!
+```
+
+Without `[branch]...[endbranch]`, multi-line if/else chains may not work correctly.
+
+### 14.2 Variable Suppression
+
+Use `~` suffix to suppress "Variable set" messages:
+
+```text
++playerJSON~:{"name":"Steve"}
+```
+
+This stores the variable silently without showing feedback to the player.

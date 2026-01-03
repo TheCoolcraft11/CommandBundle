@@ -27,3 +27,15 @@ host-commands-enabled: false
 # Allows sending HTTP requests using % prefix
 webhooks-enabled: false
 
+# Commands file configuration
+# Default commands file name (used when adding commands through /bundle command)
+# Commands are loaded from the 'commands' folder and merged into memory
+# When saving new commands, they are saved to this default file
+default-commands-file: commands.yml
+
+# Auto-load commands configuration
+# If enabled, all .yml files in the commands/ directory are loaded at startup
+# If disabled, only the default-commands-file is loaded automatically
+# You can use /bundle loadfile and /bundle enablefile to load additional files
+auto-load-commands: false
+

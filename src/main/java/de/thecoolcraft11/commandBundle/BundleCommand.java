@@ -8,6 +8,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -40,6 +41,10 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
             case "edit" -> handleEdit(sender, args);
             case "subcommand", "sub" -> handleSubCommand(sender, args);
             case "permission", "perm" -> handlePermission(sender, args);
+            case "loadfile" -> handleLoadFile(sender, args);
+            case "enablefile" -> handleEnableFile(sender, args);
+            case "disablefile" -> handleDisableFile(sender, args);
+            case "unloadfile" -> handleUnloadFile(sender, args);
             case "help" -> handleHelp(sender, args);
             default -> {
                 sendHelp(sender);
@@ -178,6 +183,106 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleLoadFile(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("commandbundle.reload")) {
+            sender.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            return true;
+        }
+
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /bundle loadfile <filename.yml>", NamedTextColor.RED));
+            return true;
+        }
+
+        String fileName = args[1];
+        if (!fileName.endsWith(".yml")) {
+            fileName = fileName + ".yml";
+        }
+
+        if (commandManager.loadCommandFile(fileName)) {
+            sender.sendMessage(Component.text("Temporarily loaded commands from: " + fileName, NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("Failed to load file: " + fileName + " (file not found)", NamedTextColor.RED));
+        }
+
+        return true;
+    }
+
+    private boolean handleEnableFile(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("commandbundle.reload")) {
+            sender.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            return true;
+        }
+
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /bundle enablefile <filename.yml>", NamedTextColor.RED));
+            return true;
+        }
+
+        String fileName = args[1];
+        if (!fileName.endsWith(".yml")) {
+            fileName = fileName + ".yml";
+        }
+
+        if (commandManager.enableCommandFile(fileName)) {
+            sender.sendMessage(Component.text("Enabled auto-loading for: " + fileName, NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("Failed to enable file: " + fileName + " (file not found)", NamedTextColor.RED));
+        }
+
+        return true;
+    }
+
+    private boolean handleDisableFile(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("commandbundle.reload")) {
+            sender.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            return true;
+        }
+
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /bundle disablefile <filename.yml>", NamedTextColor.RED));
+            return true;
+        }
+
+        String fileName = args[1];
+        if (!fileName.endsWith(".yml")) {
+            fileName = fileName + ".yml";
+        }
+
+        if (commandManager.disableCommandFile(fileName)) {
+            sender.sendMessage(Component.text("Disabled auto-loading for: " + fileName, NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("Failed to disable file: " + fileName, NamedTextColor.RED));
+        }
+
+        return true;
+    }
+
+    private boolean handleUnloadFile(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("commandbundle.reload")) {
+            sender.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            return true;
+        }
+
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /bundle unloadfile <filename.yml>", NamedTextColor.RED));
+            return true;
+        }
+
+        String fileName = args[1];
+        if (!fileName.endsWith(".yml")) {
+            fileName = fileName + ".yml";
+        }
+
+        if (commandManager.unloadCommandFile(fileName)) {
+            sender.sendMessage(Component.text("Unloaded commands from: " + fileName, NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("Failed to unload file: " + fileName + " (file not found)", NamedTextColor.RED));
+        }
+
+        return true;
+    }
+
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(Component.text("=== CommandBundle Help ===", NamedTextColor.GOLD));
         sender.sendMessage(Component.text("/bundle add <name> <cmd1> | <cmd2> | ...", NamedTextColor.YELLOW)
@@ -196,6 +301,14 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
                 .append(Component.text(" - Set/view permission", NamedTextColor.GRAY)));
         sender.sendMessage(Component.text("/bundle reload", NamedTextColor.YELLOW)
                 .append(Component.text(" - Reload command bundles", NamedTextColor.GRAY)));
+        sender.sendMessage(Component.text("/bundle loadfile <file>", NamedTextColor.YELLOW)
+                .append(Component.text(" - Temporarily load a file", NamedTextColor.GRAY)));
+        sender.sendMessage(Component.text("/bundle enablefile <file>", NamedTextColor.YELLOW)
+                .append(Component.text(" - Enable auto-load for a file", NamedTextColor.GRAY)));
+        sender.sendMessage(Component.text("/bundle disablefile <file>", NamedTextColor.YELLOW)
+                .append(Component.text(" - Disable auto-load for a file", NamedTextColor.GRAY)));
+        sender.sendMessage(Component.text("/bundle unloadfile <file>", NamedTextColor.YELLOW)
+                .append(Component.text(" - Unload commands from a file", NamedTextColor.GRAY)));
         sender.sendMessage(Component.text("/bundle help [topic]", NamedTextColor.YELLOW)
                 .append(Component.text(" - Detailed help", NamedTextColor.GRAY)));
         sender.sendMessage(Component.text("Topics: placeholders, conditions, delays, variables, random", NamedTextColor.GRAY));
@@ -516,7 +629,7 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2) {
-            
+
             String permission = commandManager.getCommandPermission(commandName);
             if (permission == null || permission.isEmpty()) {
                 sender.sendMessage(Component.text("Command /" + commandName + " has no permission requirement.", NamedTextColor.YELLOW));
@@ -525,7 +638,7 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
                         .append(Component.text(permission, NamedTextColor.WHITE)));
             }
         } else {
-            
+
             String permission = args[2];
 
             if (permission.equalsIgnoreCase("none") || permission.equalsIgnoreCase("remove")) {
@@ -547,7 +660,7 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             List<String> subCommands = Arrays.asList("add", "remove", "list", "info", "reload",
-                    "edit", "subcommand", "permission", "help");
+                    "edit", "subcommand", "permission", "loadfile", "enablefile", "disablefile", "unloadfile", "help");
             return subCommands.stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());
@@ -555,19 +668,23 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2) {
             String subCmd = args[0].toLowerCase();
-            if (subCmd.equals("remove") || subCmd.equals("info") || subCmd.equals("delete") ||
-                    subCmd.equals("edit") || subCmd.equals("permission") || subCmd.equals("perm") ||
-                    subCmd.equals("subcommand") || subCmd.equals("sub")) {
-                return commandManager.getCommandNames().stream()
-                        .filter(s -> s.startsWith(args[1].toLowerCase()))
-                        .collect(Collectors.toList());
+            switch (subCmd) {
+                case "remove", "info", "delete", "edit", "permission", "perm", "subcommand", "sub" -> {
+                    return commandManager.getCommandNames().stream()
+                            .filter(s -> s.startsWith(args[1].toLowerCase()))
+                            .collect(Collectors.toList());
+                }
+                case "loadfile", "enablefile", "disablefile", "unloadfile" -> {
+                    return getCommandYmlFiles(args[1].toLowerCase());
+                }
+                case "help" -> {
+                    return Stream.of("placeholders", "conditions", "delays", "variables", "random", "subcommands", "edit")
+                            .filter(s -> s.startsWith(args[1].toLowerCase()))
+                            .collect(Collectors.toList());
+                }
             }
 
-            if (subCmd.equals("help")) {
-                return Stream.of("placeholders", "conditions", "delays", "variables", "random", "subcommands", "edit")
-                        .filter(s -> s.startsWith(args[1].toLowerCase()))
-                        .collect(Collectors.toList());
-            }
+
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("edit")) {
@@ -577,5 +694,27 @@ public class BundleCommand implements CommandExecutor, TabCompleter {
         }
 
         return completions;
+    }
+
+    private List<String> getCommandYmlFiles(String startsWith) {
+        List<String> files = new ArrayList<>();
+        File commandsDir = new File(commandManager.getPlugin().getDataFolder(), "commands");
+
+        if (!commandsDir.exists()) {
+            return files;
+        }
+
+        File[] ymlFiles = commandsDir.listFiles((dir, name) -> name.endsWith(".yml"));
+        if (ymlFiles != null) {
+            for (File file : ymlFiles) {
+                String fileName = file.getName();
+                if (fileName.startsWith(startsWith)) {
+
+                    files.add(fileName.endsWith(".yml") ? fileName.substring(0, fileName.length() - 4) : fileName);
+                }
+            }
+        }
+
+        return files;
     }
 }

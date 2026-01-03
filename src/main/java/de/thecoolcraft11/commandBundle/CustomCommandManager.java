@@ -30,8 +30,10 @@ import java.util.stream.Collectors;
 public class CustomCommandManager {
     private final CommandBundle plugin;
     private final File commandsFile;
+    private final File commandsDirectory;
     private final File configFile;
-    private FileConfiguration commandsConfig;
+    private String defaultCommandsFileName;
+    private boolean autoLoadCommands = false;
     private final Map<String, List<String>> customCommands = new HashMap<>();
     private final Map<String, Map<String, List<String>>> subCommands = new HashMap<>();
     private final Map<String, String> commandPermissions = new HashMap<>();
@@ -44,6 +46,7 @@ public class CustomCommandManager {
     public CustomCommandManager(CommandBundle plugin) {
         this.plugin = plugin;
         this.commandsFile = new File(plugin.getDataFolder(), "commands.yml");
+        this.commandsDirectory = new File(plugin.getDataFolder(), "commands");
         this.configFile = new File(plugin.getDataFolder(), "config.yml");
         this.variableManager = new VariableManager();
         loadConfig();
@@ -56,52 +59,102 @@ public class CustomCommandManager {
         }
         FileConfiguration config = YamlConfiguration.loadConfiguration(configFile);
 
-
         blacklistedCommands.clear();
         blacklistedCommands.addAll(config.getStringList("blacklisted-commands"));
 
         hostCommandsEnabled = config.getBoolean("host-commands-enabled", false);
         webhooksEnabled = config.getBoolean("webhooks-enabled", false);
+
+
+        defaultCommandsFileName = config.getString("default-commands-file", "commands.yml");
+
+
+        autoLoadCommands = config.getBoolean("auto-load-commands", false);
     }
 
     public void loadCommands() {
-        if (!commandsFile.exists()) {
-            if (!plugin.getDataFolder().exists()) {
-                plugin.getDataFolder().mkdirs();
-            }
-            try {
-                commandsFile.createNewFile();
-            } catch (IOException e) {
-                plugin.getLogger().severe("Failed to create commands.yml: " + e.getMessage());
-            }
-        }
-
-        commandsConfig = YamlConfiguration.loadConfiguration(commandsFile);
         customCommands.clear();
         subCommands.clear();
         commandPermissions.clear();
 
 
-        if (commandsConfig.contains("commands")) {
-            ConfigurationSection commandsSection = commandsConfig.getConfigurationSection("commands");
+        if (!commandsDirectory.exists()) {
+            commandsDirectory.mkdirs();
+        }
+
+
+        if (!commandsFile.exists() && !plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
+        }
+
+
+        mergeCommandsFromDirectory();
+
+        registerAllCommands();
+    }
+
+    private void mergeCommandsFromDirectory() {
+
+        File[] commandFiles = commandsDirectory.listFiles((dir, name) -> name.endsWith(".yml"));
+
+        if (commandFiles != null && commandFiles.length > 0) {
+
+            if (!autoLoadCommands) {
+                String defaultFileName = defaultCommandsFileName != null ? defaultCommandsFileName : "commands.yml";
+                for (File file : commandFiles) {
+                    if (file.getName().equals(defaultFileName)) {
+                        FileConfiguration fileConfig = YamlConfiguration.loadConfiguration(file);
+                        mergeCommandsFromConfig(fileConfig, file.getName());
+                    }
+                }
+            } else {
+
+                for (File file : commandFiles) {
+                    FileConfiguration fileConfig = YamlConfiguration.loadConfiguration(file);
+                    mergeCommandsFromConfig(fileConfig, file.getName());
+                }
+            }
+        } else {
+
+            if (commandsFile.exists()) {
+                FileConfiguration fileConfig = YamlConfiguration.loadConfiguration(commandsFile);
+                mergeCommandsFromConfig(fileConfig, commandsFile.getName());
+            }
+        }
+
+
+        String defaultFilePath = defaultCommandsFileName != null ? defaultCommandsFileName : "commands.yml";
+        File defaultFile = new File(commandsDirectory, defaultFilePath);
+        FileConfiguration commandsConfig = new YamlConfiguration();
+    }
+
+    private void mergeCommandsFromConfig(FileConfiguration config, String fileName) {
+        if (config.contains("commands")) {
+            ConfigurationSection commandsSection = config.getConfigurationSection("commands");
             if (commandsSection != null) {
                 for (String cmdName : commandsSection.getKeys(false)) {
-                    List<String> actions = commandsConfig.getStringList("commands." + cmdName + ".actions");
+
+                    if (customCommands.containsKey(cmdName.toLowerCase())) {
+                        plugin.getLogger().warning("Command '" + cmdName + "' already loaded, skipping duplicate from " + fileName);
+                        continue;
+                    }
+
+                    List<String> actions = config.getStringList("commands." + cmdName + ".actions");
                     customCommands.put(cmdName.toLowerCase(), actions);
 
 
-                    String permission = commandsConfig.getString("commands." + cmdName + ".permission");
+                    String permission = config.getString("commands." + cmdName + ".permission");
                     if (permission != null && !permission.isEmpty()) {
                         commandPermissions.put(cmdName.toLowerCase(), permission);
                     }
 
 
-                    if (commandsConfig.contains("commands." + cmdName + ".subcommands")) {
-                        ConfigurationSection subCmdSection = commandsConfig.getConfigurationSection("commands." + cmdName + ".subcommands");
+                    if (config.contains("commands." + cmdName + ".subcommands")) {
+                        ConfigurationSection subCmdSection = config.getConfigurationSection("commands." + cmdName + ".subcommands");
                         if (subCmdSection != null) {
                             Map<String, List<String>> subs = new HashMap<>();
                             for (String subName : subCmdSection.getKeys(false)) {
-                                List<String> subActions = commandsConfig.getStringList("commands." + cmdName + ".subcommands." + subName);
+                                List<String> subActions = config.getStringList("commands." + cmdName + ".subcommands." + subName);
                                 subs.put(subName.toLowerCase(), subActions);
                             }
                             subCommands.put(cmdName.toLowerCase(), subs);
@@ -110,36 +163,41 @@ public class CustomCommandManager {
                 }
             }
         }
-
-
-        registerAllCommands();
     }
 
     public void saveCommands() {
-        commandsConfig.set("commands", null);
+
+        if (!commandsDirectory.exists()) {
+            commandsDirectory.mkdirs();
+        }
+
+
+        String defaultFileName = defaultCommandsFileName != null ? defaultCommandsFileName : "commands.yml";
+        File saveFile = new File(commandsDirectory, defaultFileName);
+
+        FileConfiguration saveConfig = new YamlConfiguration();
+        saveConfig.set("commands", null);
 
         for (Map.Entry<String, List<String>> entry : customCommands.entrySet()) {
-            commandsConfig.set("commands." + entry.getKey() + ".actions", entry.getValue());
-
+            saveConfig.set("commands." + entry.getKey() + ".actions", entry.getValue());
 
             String permission = commandPermissions.get(entry.getKey());
             if (permission != null) {
-                commandsConfig.set("commands." + entry.getKey() + ".permission", permission);
+                saveConfig.set("commands." + entry.getKey() + ".permission", permission);
             }
-
 
             Map<String, List<String>> subs = subCommands.get(entry.getKey());
             if (subs != null && !subs.isEmpty()) {
                 for (Map.Entry<String, List<String>> sub : subs.entrySet()) {
-                    commandsConfig.set("commands." + entry.getKey() + ".subcommands." + sub.getKey(), sub.getValue());
+                    saveConfig.set("commands." + entry.getKey() + ".subcommands." + sub.getKey(), sub.getValue());
                 }
             }
         }
 
         try {
-            commandsConfig.save(commandsFile);
+            saveConfig.save(saveFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Failed to save commands.yml: " + e.getMessage());
+            plugin.getLogger().severe("Failed to save commands to " + saveFile.getAbsolutePath() + ": " + e.getMessage());
         }
     }
 
@@ -260,6 +318,98 @@ public class CustomCommandManager {
         return variableManager;
     }
 
+    public CommandBundle getPlugin() {
+        return plugin;
+    }
+
+    /**
+     * Temporarily load commands from a specific file without saving it to the enabled list
+     */
+    public boolean loadCommandFile(String fileName) {
+        File targetFile = new File(commandsDirectory, fileName);
+        if (!targetFile.exists() || !targetFile.isFile()) {
+            plugin.getLogger().warning("Command file not found: " + fileName);
+            return false;
+        }
+
+        FileConfiguration fileConfig = YamlConfiguration.loadConfiguration(targetFile);
+        mergeCommandsFromConfig(fileConfig, fileName);
+        registerAllCommands();
+        plugin.getLogger().info("Temporarily loaded commands from: " + fileName);
+        return true;
+    }
+
+    /**
+     * Enable a command file to be auto-loaded on server startup
+     */
+    public boolean enableCommandFile(String fileName) {
+        File targetFile = new File(commandsDirectory, fileName);
+        if (!targetFile.exists() || !targetFile.isFile()) {
+            plugin.getLogger().warning("Command file not found: " + fileName);
+            return false;
+        }
+
+        FileConfiguration config = YamlConfiguration.loadConfiguration(configFile);
+        List<String> enabledFiles = config.getStringList("enabled-command-files");
+
+        if (!enabledFiles.contains(fileName)) {
+            enabledFiles.add(fileName);
+        }
+
+        config.set("enabled-command-files", enabledFiles);
+        try {
+            config.save(configFile);
+            autoLoadCommands = true;
+            config.set("auto-load-commands", true);
+            config.save(configFile);
+
+
+            return loadCommandFile(fileName);
+        } catch (IOException e) {
+            plugin.getLogger().severe("Failed to enable command file: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Disable a command file from being auto-loaded
+     */
+    public boolean disableCommandFile(String fileName) {
+        FileConfiguration config = YamlConfiguration.loadConfiguration(configFile);
+        List<String> enabledFiles = config.getStringList("enabled-command-files");
+
+        enabledFiles.remove(fileName);
+        config.set("enabled-command-files", enabledFiles);
+
+        try {
+            config.save(configFile);
+            plugin.getLogger().info("Disabled command file: " + fileName);
+            return true;
+        } catch (IOException e) {
+            plugin.getLogger().severe("Failed to disable command file: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Unload commands from a specific file (remove them from memory)
+     */
+    public boolean unloadCommandFile(String fileName) {
+        FileConfiguration fileConfig = YamlConfiguration.loadConfiguration(new File(commandsDirectory, fileName));
+
+        if (fileConfig.contains("commands")) {
+            ConfigurationSection commandsSection = fileConfig.getConfigurationSection("commands");
+            if (commandsSection != null) {
+                for (String cmdName : commandsSection.getKeys(false)) {
+                    removeCommand(cmdName);
+                }
+            }
+        }
+
+        plugin.getLogger().info("Unloaded commands from: " + fileName);
+        return true;
+    }
+
     private void registerAllCommands() {
 
         List<String> commandNames = new ArrayList<>(customCommands.keySet());
@@ -376,6 +526,8 @@ public class CustomCommandManager {
             }
         }
 
+        ConditionChainContext chainContext = new ConditionChainContext();
+
         for (CommandAction action : parsedActions) {
             int delay = currentDelay + action.getDelay();
 
@@ -383,27 +535,144 @@ public class CustomCommandManager {
                 new BukkitRunnable() {
                     @Override
                     public void run() {
-                        executeSingleAction(sender, action, args);
+                        executeSingleAction(sender, action, args, chainContext);
                     }
                 }.runTaskLater(plugin, delay * 20L);
                 currentDelay = delay;
             } else {
-                executeSingleAction(sender, action, args);
+                executeSingleAction(sender, action, args, chainContext);
             }
         }
     }
 
-    private void executeSingleAction(CommandSender sender, CommandAction action, String[] args) {
+    private void executeSingleAction(CommandSender sender, CommandAction action, String[] args, ConditionChainContext chain) {
 
+
+        if (action.isBranchStart()) {
+            chain.inChain = true;
+            chain.branchMatched = false;
+            chain.branchActive = false;
+            return;
+        }
+        if (action.isBranchEnd()) {
+            chain.inChain = false;
+            chain.branchMatched = false;
+            chain.branchActive = false;
+            return;
+        }
+
+
+        if (action.isCondStart()) {
+            chain.inChain = true;
+            chain.branchMatched = false;
+            chain.branchActive = false;
+
+            if (action.getConditionLogic() != null) {
+                chain.conditionLogic = action.getConditionLogic();
+            } else {
+                chain.conditionLogic = "OR";
+            }
+            chain.isNewChain = true;
+            return;
+        }
+        if (action.isCondEnd()) {
+
+
+            if (chain.branchActive) {
+                chain.branchMatched = true;
+            }
+            chain.conditionLogic = "OR";
+            return;
+        }
 
         if (action.hasElseIf()) {
-            if (!ConditionEvaluator.evaluate(sender, action.getElseIfCondition(), variableManager)) {
+            if (!chain.inChain) {
                 return;
+            }
+            if (chain.branchMatched) {
+                chain.branchActive = false;
+                return;
+            }
+            boolean result = ConditionEvaluator.evaluate(sender, action.getElseIfCondition(), variableManager);
+            if (plugin.getConfig().getBoolean("debug", false)) {
+                plugin.getLogger().info("ELSE IF: " + action.getElseIfCondition() + " -> " + result + " (branchMatched=" + chain.branchMatched + ")");
+            }
+            chain.branchActive = result;
+            if (result) {
+                chain.branchMatched = true;
             }
         } else if (action.hasCondition()) {
-            if (!ConditionEvaluator.evaluate(sender, action.getCondition(), variableManager)) {
+
+            if (action.isContinuedCondition() && chain.inChain) {
+
+                boolean result = ConditionEvaluator.evaluate(sender, action.getCondition(), variableManager);
+
+                if (chain.isNewChain) {
+                    chain.branchActive = result;
+                    chain.isNewChain = false;
+                    if (plugin.getConfig().getBoolean("debug", false)) {
+                        plugin.getLogger().info("NEW CHAIN IF (" + chain.conditionLogic + "): " + action.getCondition() + " -> " + result);
+                    }
+                } else if ("AND".equals(chain.conditionLogic)) {
+
+                    chain.branchActive = chain.branchActive && result;
+                    if (plugin.getConfig().getBoolean("debug", false)) {
+                        plugin.getLogger().info("CONTINUED IF (AND): " + action.getCondition() + " -> " + result + " (newActive=" + chain.branchActive + ")");
+                    }
+                } else {
+
+                    chain.branchActive = chain.branchActive || result;
+                    if (plugin.getConfig().getBoolean("debug", false)) {
+                        plugin.getLogger().info("CONTINUED IF (OR): " + action.getCondition() + " -> " + result + " (newActive=" + chain.branchActive + ")");
+                    }
+                }
+
+
+                if (chain.branchActive) {
+                    chain.branchMatched = true;
+                }
+            } else {
+
+                chain.inChain = true;
+                chain.branchMatched = false;
+                boolean result = ConditionEvaluator.evaluate(sender, action.getCondition(), variableManager);
+                if (plugin.getConfig().getBoolean("debug", false)) {
+                    plugin.getLogger().info("NEW IF: " + action.getCondition() + " -> " + result);
+                }
+                chain.branchActive = result;
+
+                if (result) {
+
+
+                }
+                chain.isNewChain = false;
+            }
+        } else if (action.hasElse()) {
+            if (!chain.inChain) {
                 return;
             }
+            if (chain.branchMatched) {
+                chain.branchActive = false;
+                return;
+            }
+            chain.branchActive = true;
+            chain.branchMatched = true;
+        } else {
+            if (chain.inChain && !chain.branchActive) {
+                return;
+            }
+
+            if (chain.inChain && !chain.branchMatched) {
+                chain.branchMatched = true;
+            }
+        }
+
+
+        if (action.getProcessedAction().
+
+                isEmpty() && !action.isMessage() && !action.isLoop()
+                && !action.isHostCommand() && !action.isWebhook() && !action.isSetVariable()) {
+            return;
         }
 
 
@@ -469,7 +738,9 @@ public class CustomCommandManager {
 
         String processedAction = action.getProcessedAction();
 
-        processedAction = replacePlaceholders(sender, processedAction, args);
+        processedAction =
+
+                replacePlaceholders(sender, processedAction, args);
 
         if (action.isHostCommand()) {
             String storeVar = action.getHostStoreVariable();
@@ -1062,6 +1333,26 @@ public class CustomCommandManager {
             } else {
                 break;
             }
+        }
+
+
+        int idx = 0;
+        while ((idx = text.indexOf("%arg", idx)) != -1) {
+            int end = text.indexOf("%", idx + 1);
+            if (end == -1) break;
+            String token = text.substring(idx + 1, end);
+            if (token.startsWith("arg")) {
+                String numPart = token.substring(3);
+                try {
+                    int argIndex = Integer.parseInt(numPart) - 1;
+                    String value = (argIndex >= 0 && argIndex < args.length) ? args[argIndex] : "";
+                    text = text.substring(0, idx) + value + text.substring(end + 1);
+                    idx += value.length();
+                    continue;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            idx = end + 1;
         }
 
         return text;
