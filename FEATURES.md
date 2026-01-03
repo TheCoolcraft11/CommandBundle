@@ -1,6 +1,10 @@
 ## 1. Bundle Structure (High Level)
 
-Bundles are stored in `commands.yml` like this:
+Bundles are stored in YAML files within the `plugins/CommandBundle/commands/` directory. You can use multiple `.yml`
+files to organize your commands. All files are automatically loaded and merged at startup (unless `auto-load-commands`
+is disabled in `config.yml`).
+
+**Example structure:**
 
 ```yml
 commands:
@@ -16,13 +20,27 @@ commands:
         - "...action for /example sub2..."
 ```
 
+**Files organization:**
+
+- Store bundles in any `.yml` file in the `commands/` directory (e.g., `commands.yml`, `events.yml`, `admin.yml`)
+- When using `/bundle add` command, bundles are saved to the `default-commands-file` (default: `commands.yml`)
+- All `.yml` files are merged into a single set of commands at runtime
+- Use `/bundle loadfile`, `/bundle enablefile`, and `/bundle disablefile` to manage which files are loaded
+
+**Action lines structure:**
+
 - Each entry in `actions:` (and in each `subcommands:` list) is a **single action line**.
 - An action line can contain:
-    - Prefixes like `[delay:]`, `[if:]`, `[else if:]`, `[else]`, `[random]`, `[foreach:]`.
-    - Special markers like `!`, `-`, `+`, `$`, `%`, `#message`.
-    - Placeholders like `%player%`, `%var:name%`, `%players%`, `{math:...}`.
+    - **Timing prefixes**: `[delay:]`
+    - **Branching prefixes**: `[if:]`, `[else if:]`, `[else]`, `[branch]`, `[endbranch]`
+    - **Logic prefixes**: `[AND]`, `[OR]`, `[CONDSTART]`, `[CONDEND]`
+    - **Special markers**: `!` (console), `-` (suppress output), `+` (variables), `$` (host commands), `%` (webhooks),
+      `#message` (messages)
+    - **File helpers**: `,,` (read files), `;;` (write files)
+    - **Modifiers**: `[random]`, `[foreach:]`
+    - **Placeholders**: `%player%`, `%var:name%`, `%players%`, `{math:...}`
 
-The rest of this file documents these pieces.
+The rest of this file documents these pieces in detail.
 
 ---
 
@@ -95,21 +113,15 @@ use **OR** logic (any condition can be true). To require **all** conditions to b
 
 **Using `[CONDSTART]` and `[CONDEND]`:**
 
+All conditions in a chain must be on a **single action line** with the `[CONDSTART]` and `[CONDEND]` markers:
+
 ```text
-[CONDSTART][OR]
-[if:<condition1>]
-[if:<condition2>]
-[if:<condition3>]
-[CONDEND]
+[CONDSTART][OR][if:<condition1>][if:<condition2>][if:<condition3>][CONDEND]
 <action when any condition is true>
 ```
 
 ```text
-[CONDSTART][AND]
-[if:<condition1>]
-[if:<condition2>]
-[if:<condition3>]
-[CONDEND]
+[CONDSTART][AND][if:<condition1>][if:<condition2>][if:<condition3>][CONDEND]
 <action when all conditions are true>
 ```
 
@@ -117,18 +129,14 @@ use **OR** logic (any condition can be true). To require **all** conditions to b
 
 - `[CONDSTART]` marks the beginning of a condition chain
 - `[AND]` or `[OR]` specifies the logic mode (default is `[OR]` if not specified)
-- Multiple `[if:...]` lines without actions are evaluated together
+- All `[if:...]` conditions must be on the same line as `[CONDSTART]` and `[CONDEND]`
 - `[CONDEND]` closes the chain and the following action executes if the combined condition is met
 - This works both inside and outside of `[branch]` blocks
 
 **Example - OR Logic (any condition matches):**
 
 ```text
-[CONDSTART][OR]
-[if:permission:vip.tier1]
-[if:permission:vip.tier2]
-[if:permission:vip.tier3]
-[CONDEND]
+[CONDSTART][OR][if:permission:vip.tier1][if:permission:vip.tier2][if:permission:vip.tier3][CONDEND]
 #message:gold:VIP access granted!
 !give %player% diamond 5
 ```
@@ -138,11 +146,7 @@ In this example, the player needs **any one** of the three VIP permissions to re
 **Example - AND Logic (all conditions must match):**
 
 ```text
-[CONDSTART][AND]
-[if:level:>=20]
-[if:health:>15]
-[if:world:adventure_world]
-[CONDEND]
+[CONDSTART][AND][if:level:>=20][if:health:>15][if:world:adventure_world][CONDEND]
 #message:green:All requirements met! Quest unlocked!
 !give %player% enchanted_book 1
 ```
@@ -154,11 +158,7 @@ adventure_world.
 
 ```text
 [branch]
-[CONDSTART][AND]
-[if:permission:quest.access]
-[if:level:>=10]
-[if:var:quest_completed:false]
-[CONDEND]
+[CONDSTART][AND][if:permission:quest.access][if:level:>=10][if:var:quest_completed:false][CONDEND]
 #message:gold:Starting quest!
 +quest_completed:true
 [else if:var:quest_completed:true]
@@ -693,13 +693,16 @@ Check multiple conditions on stored JSON data:
 ### 13.5 Webhook + Variable + Condition
 
 ```text
-%https://api.example.com/profile>>profileJson::Content-Type:application/json::{"uuid":"%uuid%"}
-[branch]
-[if:var:profileJson.name:!=]
-#message:gold:Welcome back, %var:profileJson.name%!
-[else]
-#message:yellow:Welcome, new player!
-[endbranch]
+      - '%http://localhost:8080/api>>playerJSON::Content-Type:application/json::{"uuid":"%uuid%"}' #or +playerJSON~:{"name": "Steve", "level": 5}'
+      - '[delay:2]' #wait for webhook response
+      - '[branch]' 
+      - '[CONDSTART][AND][if:var:playerJSON.name:!=][if:var:playerJSON.level:!=][CONDEND]' 
+      - '#message:gold:Welcome back %var:playerJSON.name%, level %var:playerJSON.level%!'
+      - '[else if:var:playerJSON.name:!=]'
+      - '#message:yellow:Welcome back %var:playerJSON.name%! (No level data)'
+      - '[else]'
+      - '#message:red:New player detected!'
+      - '[endbranch]'
 ```
 
 ### 13.6 Host Command + Loop
@@ -714,12 +717,7 @@ $ls -1 world/playerdata >>playerFiles
 Check that **all** conditions are met before granting access:
 
 ```text
-[CONDSTART][AND]
-[if:permission:quest.access]
-[if:level:>=20]
-[if:health:>15]
-[if:world:dungeon]
-[CONDEND]
+[CONDSTART][AND][if:permission:quest.access][if:level:>=20][if:health:>15][if:world:dungeon][CONDEND]
 #message:green:All requirements met! Entering hard mode dungeon.
 !tp %player% -100 64 -100
 !effect give %player% minecraft:resistance 300 1
@@ -730,12 +728,7 @@ Check that **all** conditions are met before granting access:
 Grant rewards if player has **any** of several VIP tiers:
 
 ```text
-[CONDSTART][OR]
-[if:permission:vip.bronze]
-[if:permission:vip.silver]
-[if:permission:vip.gold]
-[if:permission:vip.platinum]
-[CONDEND]
+[CONDSTART][OR][if:permission:vip.bronze][if:permission:vip.silver][if:permission:vip.gold][if:permission:vip.platinum][CONDEND]
 #message:gold:VIP member detected! Daily reward granted.
 !give %player% diamond 5
 !give %player% emerald 10
@@ -747,11 +740,7 @@ Using AND logic within a branch structure:
 
 ```text
 [branch]
-[CONDSTART][AND]
-[if:permission:event.participate]
-[if:level:>=15]
-[if:var:event_joined:false]
-[CONDEND]
+[CONDSTART][AND][if:permission:event.participate][if:level:>=15][if:var:event_joined:false][CONDEND]
 #message:aqua:Joining the event!
 +event_joined:true
 !tp %player% 0 100 0
@@ -767,18 +756,11 @@ Using AND logic within a branch structure:
 Combining multiple AND checks with different actions:
 
 ```text
-[CONDSTART][AND]
-[if:world:survival]
-[if:gamemode:SURVIVAL]
-[if:health:>10]
-[CONDEND]
+[CONDSTART][AND][if:world:survival][if:gamemode:SURVIVAL][if:health:>10][CONDEND]
 #message:green:Survival mode active - teleporting to safe zone
 !tp %player% spawn
 
-[CONDSTART][AND]
-[if:world:creative]
-[if:gamemode:CREATIVE]
-[CONDEND]
+[CONDSTART][AND][if:world:creative][if:gamemode:CREATIVE][CONDEND]
 #message:aqua:Creative mode active - granting builder tools
 !give %player% worldedit:wand 1
 ```
